@@ -27,7 +27,7 @@ public class JvmContext {
             extension = ".so";
         }
 
-        String libName = (os.contains("win") ? "" : "lib") + "libJvmContext" + extension;
+        String libName = "libJvmContext" + extension;
         String resourcePath = "/" + folder + "/" + libName;
 
         try {
