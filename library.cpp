@@ -45,26 +45,27 @@ Java_top_nontage_jvmcontext_JvmContext_getInstrumentationImpl(JNIEnv *env, jclas
     caps.can_set_native_method_prefix = 1;
     jvmti->AddCapabilities(&caps);
 
-    auto *agent = static_cast<JPLISAgent *>(std::calloc(1, sizeof(JPLISAgent)));
-    if (!agent) return nullptr;
+    JPLISAgent *agent = nullptr;
+    if (jvmti->Allocate(sizeof(JPLISAgent), reinterpret_cast<unsigned char **>(&agent)) != JVMTI_ERROR_NONE) return nullptr;
+    std::memset(agent, 0, sizeof(JPLISAgent));
 
     agent->mJVM = vm;
     agent->mNormalEnvironment.mJVMTIEnv = jvmti;
     agent->mNormalEnvironment.mAgent = agent;
     agent->mNormalEnvironment.mIsRetransformer = JNI_FALSE;
-
     agent->mRetransformEnvironment.mJVMTIEnv = jvmti;
     agent->mRetransformEnvironment.mAgent = agent;
     agent->mRetransformEnvironment.mIsRetransformer = JNI_TRUE;
-
     agent->mRedefineAvailable = JNI_TRUE;
     agent->mRetransformAvailable = JNI_TRUE;
 
     const jclass implClass = env->FindClass("sun/instrument/InstrumentationImpl");
-    if (env->ExceptionCheck()) return nullptr;
+    if (env->ExceptionCheck()) {
+        jvmti->Deallocate(reinterpret_cast<unsigned char *>(agent));
+        return nullptr;
+    }
 
     jobject inst = nullptr;
-
     jmethodID ctor = env->GetMethodID(implClass, "<init>", "(JZZZ)V");
 
     if (!env->ExceptionCheck()) {
@@ -78,24 +79,28 @@ Java_top_nontage_jvmcontext_JvmContext_getInstrumentationImpl(JNIEnv *env, jclas
     }
 
     if (!inst) {
-        std::free(agent);
+        jvmti->Deallocate(reinterpret_cast<unsigned char *>(agent));
         return nullptr;
     }
 
     agent->mInstrumentationImpl = env->NewGlobalRef(inst);
 
     const jclass clsClazz = env->FindClass("java/lang/Class");
+    if (clsClazz != nullptr && !env->ExceptionCheck()) {
+        jmethodID getModule = env->GetMethodID(clsClazz, "getModule", "()Ljava/lang/Module;");
+        if (getModule != nullptr && !env->ExceptionCheck()) {
+            jobject instrumentModule = env->CallObjectMethod(inst, getModule);
+            jobject callerModule = env->CallObjectMethod(clazz, getModule);
 
-    if (const jmethodID getModule = env->GetMethodID(clsClazz, "getModule", "()Ljava/lang/Module;");
-        getModule != nullptr && !env->ExceptionCheck()) {
-        const jobject instrumentModule = env->CallObjectMethod(implClass, getModule);
-
-        if (const jobject callerModule = env->CallObjectMethod(clazz, getModule); instrumentModule && callerModule) {
+            if (instrumentModule && callerModule && !env->ExceptionCheck()) {
 #ifdef JVMTI_VERSION_9
-            jvmti->AddModuleOpens(instrumentModule, "sun.instrument", callerModule);
+                jvmti->AddModuleOpens(instrumentModule, "sun.instrument", callerModule);
 #endif
+            }
         }
-    } else {
+    }
+
+    if (env->ExceptionCheck()) {
         env->ExceptionClear();
     }
 
