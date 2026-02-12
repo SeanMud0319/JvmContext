@@ -18,28 +18,38 @@ public class JvmContext {
         if (instrumentation != null) return instrumentation;
 
         instrumentation = (Instrumentation) System.getProperties().get(PROP_KEY);
-        if (instrumentation != null) return instrumentation;
+        if (instrumentation != null) {
+            System.getProperties().remove(PROP_KEY);
+            return instrumentation;
+        }
 
         synchronized (JvmContext.class) {
             instrumentation = (Instrumentation) System.getProperties().get(PROP_KEY);
-            if (instrumentation != null) return instrumentation;
+            if (instrumentation != null) {
+                System.getProperties().remove(PROP_KEY);
+                return instrumentation;
+            }
 
             try {
                 File agentJar = createTemporaryAgentJar();
+                try {
+                    int result = forceLoadAgent(agentJar.getAbsolutePath());
+                    if (result != 0) throw new RuntimeException("Native forceLoadAgent failed: " + result);
 
-                int result = forceLoadAgent(agentJar.getAbsolutePath());
-                if (result != 0) throw new RuntimeException("Native forceLoadAgent failed: " + result);
-
-                long start = System.currentTimeMillis();
-                while (System.currentTimeMillis() - start < 5000) {
-                    instrumentation = (Instrumentation) System.getProperties().remove(PROP_KEY);
-                    if (instrumentation != null) {
-                        try { agentJar.delete(); } catch (Exception ignored) {}
-                        return instrumentation;
+                    long start = System.currentTimeMillis();
+                    while (System.currentTimeMillis() - start < 5000) {
+                        instrumentation = (Instrumentation) System.getProperties().remove(PROP_KEY);
+                        if (instrumentation != null) {
+                            return instrumentation;
+                        }
+                        Thread.sleep(50);
                     }
-                    Thread.sleep(50);
+                    throw new RuntimeException("Timeout waiting for Agent initialization.");
+                } finally {
+                    if (agentJar.exists()) {
+                        agentJar.delete();
+                    }
                 }
-                throw new RuntimeException("Timeout waiting for Agent initialization.");
             } catch (Exception e) {
                 throw new RuntimeException("Failed to force load instrumentation", e);
             }
@@ -56,19 +66,23 @@ public class JvmContext {
         attrs.put(new Attributes.Name("Can-Retransform-Classes"), "true");
         attrs.put(new Attributes.Name("Can-Redefine-Classes"), "true");
 
-        try (JarOutputStream jos = new JarOutputStream(new FileOutputStream(tempJar), manifest)) {
+        try (FileOutputStream fos = new FileOutputStream(tempJar);
+             JarOutputStream jos = new JarOutputStream(fos, manifest)) {
+
             String className = AgentProxy.class.getName().replace('.', '/') + ".class";
             jos.putNextEntry(new JarEntry(className));
 
             try (InputStream is = JvmContext.class.getClassLoader().getResourceAsStream(className)) {
                 if (is == null) throw new IOException("Cannot find bytecode for " + className);
-                byte[] buffer = new byte[4096];
+                byte[] buffer = new byte[8192];
                 int n;
                 while ((n = is.read(buffer)) != -1) {
                     jos.write(buffer, 0, n);
                 }
             }
             jos.closeEntry();
+            jos.finish();
+            fos.getFD().sync();
         }
         return tempJar;
     }
