@@ -38,7 +38,12 @@ public class JvmContext {
                 long start = System.currentTimeMillis();
                 while (System.currentTimeMillis() - start < 5000) {
                     instrumentation = (Instrumentation) System.getProperties().remove(PROP_KEY);
-                    if (instrumentation != null) return instrumentation;
+                    if (instrumentation != null) {
+                        try {
+                            agentJar.delete();
+                        } catch (Exception ignored) {}
+                        return instrumentation;
+                    }
                     Thread.sleep(50);
                 }
                 throw new RuntimeException("Timeout waiting for Agent initialization.");
@@ -50,7 +55,6 @@ public class JvmContext {
 
     private static File createTemporaryAgentJar(File currentJar) throws IOException {
         File tempJar = File.createTempFile("jvm_agent_proxy", ".jar");
-        tempJar.deleteOnExit();
 
         Manifest manifest = new Manifest();
         Attributes attrs = manifest.getMainAttributes();
