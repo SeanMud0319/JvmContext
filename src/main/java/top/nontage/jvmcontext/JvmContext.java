@@ -25,12 +25,7 @@ public class JvmContext {
             if (instrumentation != null) return instrumentation;
 
             try {
-                File currentJar = new File(JvmContext.class.getProtectionDomain()
-                        .getCodeSource()
-                        .getLocation()
-                        .toURI());
-
-                File agentJar = createTemporaryAgentJar(currentJar);
+                File agentJar = createTemporaryAgentJar();
 
                 int result = forceLoadAgent(agentJar.getAbsolutePath());
                 if (result != 0) throw new RuntimeException("Native forceLoadAgent failed: " + result);
@@ -39,9 +34,7 @@ public class JvmContext {
                 while (System.currentTimeMillis() - start < 5000) {
                     instrumentation = (Instrumentation) System.getProperties().remove(PROP_KEY);
                     if (instrumentation != null) {
-                        try {
-                            agentJar.delete();
-                        } catch (Exception ignored) {}
+                        try { agentJar.delete(); } catch (Exception ignored) {}
                         return instrumentation;
                     }
                     Thread.sleep(50);
@@ -53,7 +46,7 @@ public class JvmContext {
         }
     }
 
-    private static File createTemporaryAgentJar(File currentJar) throws IOException {
+    private static File createTemporaryAgentJar() throws IOException {
         File tempJar = File.createTempFile("jvm_agent_proxy", ".jar");
 
         Manifest manifest = new Manifest();
@@ -62,10 +55,19 @@ public class JvmContext {
         attrs.put(new Attributes.Name("Agent-Class"), AgentProxy.class.getName());
         attrs.put(new Attributes.Name("Can-Retransform-Classes"), "true");
         attrs.put(new Attributes.Name("Can-Redefine-Classes"), "true");
-        attrs.put(new Attributes.Name("Boot-Class-Path"), currentJar.getAbsolutePath().replace("\\", "/"));
 
         try (JarOutputStream jos = new JarOutputStream(new FileOutputStream(tempJar), manifest)) {
-            jos.putNextEntry(new JarEntry("META-INF/"));
+            String className = AgentProxy.class.getName().replace('.', '/') + ".class";
+            jos.putNextEntry(new JarEntry(className));
+
+            try (InputStream is = JvmContext.class.getClassLoader().getResourceAsStream(className)) {
+                if (is == null) throw new IOException("Cannot find bytecode for " + className);
+                byte[] buffer = new byte[4096];
+                int n;
+                while ((n = is.read(buffer)) != -1) {
+                    jos.write(buffer, 0, n);
+                }
+            }
             jos.closeEntry();
         }
         return tempJar;
