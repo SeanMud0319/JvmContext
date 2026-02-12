@@ -1,109 +1,45 @@
 #include <jni.h>
-#include <jvmti.h>
-#include <cstdlib>
-#include <cstring>
+#include <string>
 
-struct JPLISAgentStruct;
+#ifdef _WIN32
+#include <windows.h>
+#define LIB_NAME "instrument.dll"
+#define GET_FUNC GetProcAddress
+typedef HMODULE LIBRARY_HANDLE;
+#else
+#include <dlfcn.h>
+#define LIB_NAME "libinstrument.so"
+#define GET_FUNC dlsym
+typedef void* LIBRARY_HANDLE;
+#endif
 
-struct JPLISEnvironment {
-    jvmtiEnv *mJVMTIEnv;
-    JPLISAgentStruct *mAgent;
-    jboolean mIsRetransformer;
-};
-
-struct JPLISAgentStruct {
-    JavaVM *mJVM;
-    JPLISEnvironment mNormalEnvironment;
-    JPLISEnvironment mRetransformEnvironment;
-    jobject mInstrumentationImpl;
-    jmethodID mPremainCaller;
-    jmethodID mAgentmainCaller;
-    jmethodID mTransform;
-    jboolean mRedefineAvailable;
-    jboolean mRedefineAdded;
-    jboolean mNativeMethodPrefixAvailable;
-    jboolean mNativeMethodPrefixAdded;
-    jboolean mRetransformAvailable;
-    jboolean mRetransformAdded;
-};
-
-using JPLISAgent = JPLISAgentStruct;
+typedef jint (JNICALL *Agent_OnAttach_t)(JavaVM *, char *, void *);
 
 extern "C" {
-JNIEXPORT jobject JNICALL
-Java_top_nontage_jvmcontext_JvmContext_getInstrumentationImpl(JNIEnv *env, jclass clazz) {
-    JavaVM *vm = nullptr;
-    if (env->GetJavaVM(&vm) != JNI_OK) return nullptr;
+    JNIEXPORT jint JNICALL
+    Java_top_nontage_jvmcontext_JvmContext_forceLoadAgent(JNIEnv *env, jclass clazz, jstring jarPath) {
+        JavaVM *vm = nullptr;
+        if (env->GetJavaVM(&vm) != JNI_OK) return -1;
 
-    jvmtiEnv *jvmti = nullptr;
-    vm->GetEnv(reinterpret_cast<void **>(&jvmti), JVMTI_VERSION_1_2);
-    if (!jvmti) return nullptr;
+        LIBRARY_HANDLE hLib = nullptr;
 
-    jvmtiCapabilities caps{};
-    caps.can_redefine_classes = 1;
-    caps.can_retransform_classes = 1;
-    caps.can_set_native_method_prefix = 1;
-    jvmti->AddCapabilities(&caps);
-
-    JPLISAgent *agent = nullptr;
-    if (jvmti->Allocate(sizeof(JPLISAgent), reinterpret_cast<unsigned char **>(&agent)) != JVMTI_ERROR_NONE) return nullptr;
-    std::memset(agent, 0, sizeof(JPLISAgent));
-
-    agent->mJVM = vm;
-    agent->mNormalEnvironment.mJVMTIEnv = jvmti;
-    agent->mNormalEnvironment.mAgent = agent;
-    agent->mNormalEnvironment.mIsRetransformer = JNI_FALSE;
-    agent->mRetransformEnvironment.mJVMTIEnv = jvmti;
-    agent->mRetransformEnvironment.mAgent = agent;
-    agent->mRetransformEnvironment.mIsRetransformer = JNI_TRUE;
-    agent->mRedefineAvailable = JNI_TRUE;
-    agent->mRetransformAvailable = JNI_TRUE;
-
-    const jclass implClass = env->FindClass("sun/instrument/InstrumentationImpl");
-    if (env->ExceptionCheck()) {
-        jvmti->Deallocate(reinterpret_cast<unsigned char *>(agent));
-        return nullptr;
-    }
-
-    jobject inst = nullptr;
-    jmethodID ctor = env->GetMethodID(implClass, "<init>", "(JZZZ)V");
-
-    if (!env->ExceptionCheck()) {
-        inst = env->NewObject(implClass, ctor, reinterpret_cast<jlong>(agent), JNI_TRUE, JNI_TRUE, JNI_TRUE);
-    } else {
-        env->ExceptionClear();
-        ctor = env->GetMethodID(implClass, "<init>", "(JZZ)V");
-        if (!env->ExceptionCheck()) {
-            inst = env->NewObject(implClass, ctor, reinterpret_cast<jlong>(agent), JNI_TRUE, JNI_TRUE);
-        }
-    }
-
-    if (!inst) {
-        jvmti->Deallocate(reinterpret_cast<unsigned char *>(agent));
-        return nullptr;
-    }
-
-    agent->mInstrumentationImpl = env->NewGlobalRef(inst);
-
-    const jclass clsClazz = env->FindClass("java/lang/Class");
-    if (clsClazz != nullptr && !env->ExceptionCheck()) {
-        jmethodID getModule = env->GetMethodID(clsClazz, "getModule", "()Ljava/lang/Module;");
-        if (getModule != nullptr && !env->ExceptionCheck()) {
-            jobject instrumentModule = env->CallObjectMethod(inst, getModule);
-            jobject callerModule = env->CallObjectMethod(clazz, getModule);
-
-            if (instrumentModule && callerModule && !env->ExceptionCheck()) {
-#ifdef JVMTI_VERSION_9
-                jvmti->AddModuleOpens(instrumentModule, "sun.instrument", callerModule);
+#ifdef _WIN32
+        hLib = GetModuleHandleA(LIB_NAME);
+        if (!hLib) hLib = LoadLibraryA(LIB_NAME);
+#else
+        hLib = dlopen(LIB_NAME, RTLD_LAZY);
 #endif
-            }
-        }
-    }
 
-    if (env->ExceptionCheck()) {
-        env->ExceptionClear();
-    }
+        if (!hLib) return -2;
 
-    return inst;
-}
+        const auto pAgentOnAttach = reinterpret_cast<Agent_OnAttach_t>(GET_FUNC(hLib, "Agent_OnAttach"));
+        if (!pAgentOnAttach) return -3;
+
+        const char* path = env->GetStringUTFChars(jarPath, nullptr);
+
+        const jint result = pAgentOnAttach(vm, const_cast<char *>(path), nullptr);
+
+        env->ReleaseStringUTFChars(jarPath, path);
+        return result;
+    }
 }
