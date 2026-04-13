@@ -96,6 +96,14 @@ public class JvmContext {
     private native static int forceLoadAgent(String jarPath);
 
     private static synchronized void loadNativeLibrary() {
+        File tempDir = new File(System.getProperty("java.io.tmpdir"));
+        File[] oldLibs = tempDir.listFiles((dir, name) -> name.startsWith("jvm_ctx_native_") && name.endsWith(".dll"));
+        if (oldLibs != null) {
+            for (File old : oldLibs) {
+                // noinspection ResultOfMethodCallIgnored
+                old.delete();
+            }
+        }
         if (isNativeLoaded) return;
         String os = System.getProperty("os.name").toLowerCase();
         String ext = os.contains("win") ? ".dll" : (os.contains("mac") ? ".dylib" : ".so");
