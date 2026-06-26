@@ -10,10 +10,6 @@ public class JvmContext {
     private static boolean isNativeLoaded = false;
     private static final String PROP_KEY = "top.nontage.jvmcontext.inst";
 
-    static {
-        loadNativeLibrary();
-    }
-
     public static Instrumentation getInstrumentation() {
         if (instrumentation != null) return instrumentation;
 
@@ -31,6 +27,10 @@ public class JvmContext {
             }
 
             try {
+                if (!isNativeLoaded) {
+                    loadNativeLibrary();
+                }
+
                 File agentJar = createTemporaryAgentJar();
                 try {
                     int result = forceLoadAgent(agentJar.getAbsolutePath());
