@@ -5,6 +5,14 @@ A lightweight utility that provides access to the JVM's `Instrumentation` instan
 
 ## Installation
 
+### Build from Source
+
+```bash
+git clone https://github.com/SeanMud0319/JvmContext.git
+cd JvmContext
+mvn clean install
+```
+
 ### Gradle
 
 ```gradle
