@@ -4,6 +4,7 @@ A lightweight utility that provides access to the JVM's `Instrumentation` instan
 
 
 ## Installation
+You need to compile it first.
 
 ### Build from Source
 
@@ -16,6 +17,10 @@ mvn clean install
 ### Gradle
 
 ```gradle
+repositories {
+    mavenLocal()
+}
+
 dependencies {
     implementation("top.nontage:jvm-context:1.0.0")
 }
