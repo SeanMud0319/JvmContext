@@ -1,3 +1,4 @@
+![CI](https://github.com/SeanMud0319/JvmContext/actions/workflows/ci.yml/badge.svg)
 # JvmContext
 
 A lightweight utility that provides access to the JVM's `Instrumentation` instance without manual agent configuration.
