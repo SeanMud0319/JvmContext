@@ -93,7 +93,13 @@ public class JvmContext {
         }
     }
 
-    private native static int forceLoadAgent(String jarPath);
+    private static native int forceLoadAgent(String jarPath);
+
+    private static native void setDebugMode(boolean debug);
+
+    public static void enableDebug(boolean enable) {
+        setDebugMode(enable);
+    }
 
     private static synchronized void loadNativeLibrary() {
         File tempDir = new File(System.getProperty("java.io.tmpdir"));
