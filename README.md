@@ -4,6 +4,18 @@
 A lightweight utility that provides access to the JVM's `Instrumentation` instance without manual agent configuration.
 
 
+## Java Version Supported
+
+| Version | Status |
+|:--------|:------:|
+| Java 8  |   ✅    |
+| Java 11 |   ✅    |
+| Java 17 |   ✅    |
+| Java 21 |   ✅    |
+| Java 22 |   ✅    |
+| Java 25 |   ✅    |
+
+
 ## Installation
 You need to compile it first.
 
