@@ -17,29 +17,10 @@ A lightweight utility that provides access to the JVM's `Instrumentation` instan
 
 
 ## Installation
-You need to compile it first.
-
-### Build from Source
-
-```bash
-git clone https://github.com/SeanMud0319/JvmContext.git
-cd JvmContext
-mvn clean install
-```
-
-### Gradle
-
-```gradle
-repositories {
-    mavenLocal()
-}
-
-dependencies {
-    implementation("top.nontage:jvm-context:1.0.0")
-}
-```
 
 ### Maven
+
+Add the following dependency to your `pom.xml`:
 
 ```xml
 <dependency>
@@ -47,6 +28,26 @@ dependencies {
     <artifactId>jvm-context</artifactId>
     <version>1.0.0</version>
 </dependency>
+```
+
+### Gradle
+
+Add the following dependency to your `build.gradle`:
+
+```gradle
+dependencies {
+    implementation 'top.nontage:jvm-context:1.0.0'
+}
+```
+
+### Build from Source
+
+To build the project locally:
+
+```bash
+git clone https://github.com/SeanMud0319/JvmContext.git
+cd JvmContext
+mvn clean install
 ```
 
 
