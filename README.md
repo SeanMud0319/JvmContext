@@ -1,3 +1,5 @@
+![Maven Central](https://img.shields.io/maven-central/v/top.nontage/jvm-context?label=Maven%20Central)
+![License](https://img.shields.io/github/license/seanmud0319/jvmcontext)
 ![CI](https://github.com/SeanMud0319/JvmContext/actions/workflows/ci.yml/badge.svg)
 # JvmContext
 
