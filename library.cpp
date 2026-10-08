@@ -2,12 +2,22 @@
 #include <string>
 #include <iostream>
 #include <vector>
+#include <cstdlib>
+#include <cstdio>
 
 #ifdef _WIN32
 #include <windows.h>
 #define LIB_NAME "instrument.dll"
 #define GET_FUNC GetProcAddress
 typedef HMODULE LIBRARY_HANDLE;
+#elif defined(__APPLE__)
+#include <dlfcn.h>
+#include <limits.h>
+#include <unistd.h>
+#include <mach-o/dyld.h>
+#define LIB_NAME "libinstrument.dylib"
+#define GET_FUNC dlsym
+typedef void* LIBRARY_HANDLE;
 #else
 #include <dlfcn.h>
 #include <limits.h>
@@ -50,6 +60,23 @@ std::string getCurrentJvmPath() {
     if (GetModuleFileNameA(NULL, modulePath, MAX_PATH)) {
         std::string pathStr = modulePath;
         size_t lastSlash = pathStr.find_last_of("\\/");
+        if (lastSlash != std::string::npos) {
+            result = pathStr.substr(0, lastSlash);
+        }
+    }
+#elif defined(__APPLE__)
+    uint32_t size = 0;
+    _NSGetExecutablePath(nullptr, &size);
+    std::vector<char> buf(size + 1);
+    if (_NSGetExecutablePath(buf.data(), &size) == 0) {
+        char resolved[PATH_MAX];
+        std::string pathStr;
+        if (realpath(buf.data(), resolved) != nullptr) {
+            pathStr = resolved;
+        } else {
+            pathStr = buf.data();
+        }
+        size_t lastSlash = pathStr.find_last_of('/');
         if (lastSlash != std::string::npos) {
             result = pathStr.substr(0, lastSlash);
         }
@@ -110,6 +137,46 @@ LIBRARY_HANDLE findInstrumentLibrary() {
     } else {
         logMessage("[Native] JAVA_HOME not set");
     }
+
+#elif defined(__APPLE__)
+    logMessage("[Native] OS: macOS");
+    logMessage("[Native] Current JVM path: " + jvmPath);
+
+    if (!jvmPath.empty()) {
+        searchPaths.push_back(jvmPath + "/" LIB_NAME);
+
+        size_t pos = jvmPath.find_last_of('/');
+        if (pos != std::string::npos) {
+            std::string parent = jvmPath.substr(0, pos);
+            searchPaths.push_back(parent + "/jre/lib/" LIB_NAME);
+            searchPaths.push_back(parent + "/jre/lib/server/" LIB_NAME);
+            searchPaths.push_back(parent + "/lib/" LIB_NAME);
+            searchPaths.push_back(parent + "/lib/server/" LIB_NAME);
+        }
+
+        searchPaths.push_back(jvmPath + "/../jre/lib/" LIB_NAME);
+        searchPaths.push_back(jvmPath + "/../jre/lib/server/" LIB_NAME);
+        searchPaths.push_back(jvmPath + "/../lib/" LIB_NAME);
+        searchPaths.push_back(jvmPath + "/../lib/server/" LIB_NAME);
+    }
+
+    if (!javaHome.empty() && javaHome != jvmPath) {
+        logMessage("[Native] JAVA_HOME: " + javaHome + " (different from current JVM)");
+        searchPaths.push_back(javaHome + "/jre/lib/" LIB_NAME);
+        searchPaths.push_back(javaHome + "/jre/lib/server/" LIB_NAME);
+        searchPaths.push_back(javaHome + "/jre/bin/" LIB_NAME);
+        searchPaths.push_back(javaHome + "/bin/" LIB_NAME);
+        searchPaths.push_back(javaHome + "/lib/" LIB_NAME);
+        searchPaths.push_back(javaHome + "/lib/server/" LIB_NAME);
+    } else if (!javaHome.empty()) {
+        logMessage("[Native] JAVA_HOME: " + javaHome + " (same as current JVM)");
+    } else {
+        logMessage("[Native] JAVA_HOME not set");
+    }
+
+    searchPaths.push_back("/Library/Java/JavaVirtualMachines/current/Contents/Home/jre/lib/" LIB_NAME);
+    searchPaths.push_back("/Library/Java/JavaVirtualMachines/current/Contents/Home/lib/" LIB_NAME);
+
 #else
     logMessage("[Native] OS: Linux");
     logMessage("[Native] Current JVM path: " + jvmPath);
@@ -157,7 +224,11 @@ LIBRARY_HANDLE findInstrumentLibrary() {
             logError("[Native] FAILED: " + path + " - WinErr: " + std::to_string(err));
         }
 #else
+#ifdef __APPLE__
+        hLib = dlopen(path.c_str(), RTLD_LAZY | RTLD_GLOBAL);
+#else
         hLib = dlopen(path.c_str(), RTLD_LAZY);
+#endif
         if (hLib) {
             logMessage("[Native] SUCCESS: Loaded from: " + path);
             return hLib;
@@ -193,7 +264,11 @@ LIBRARY_HANDLE findInstrumentLibrary() {
         logError("[Native Error] Failed to load from system path. WinErr: " + std::to_string(err));
     }
 #else
+#ifdef __APPLE__
+    hLib = dlopen(LIB_NAME, RTLD_LAZY | RTLD_GLOBAL);
+#else
     hLib = dlopen(LIB_NAME, RTLD_LAZY);
+#endif
     if (hLib) {
         logMessage("[Native] SUCCESS: Loaded from system path");
     } else {

@@ -113,7 +113,7 @@ public class JvmContext {
         if (isNativeLoaded) return;
         String os = System.getProperty("os.name").toLowerCase();
         String ext = os.contains("win") ? ".dll" : (os.contains("mac") ? ".dylib" : ".so");
-        String folder = os.contains("win") ? "win32-x86-64" : (os.contains("mac") ? "darwin-x86-64" : "linux-x86-64");
+        String folder = os.contains("win") ? "win32-x86-64" : (os.contains("mac") ? "darwin-arrch64" : "linux-x86-64");
         String resourcePath = "/" + folder + "/libJvmContext" + ext;
 
         try (InputStream in = JvmContext.class.getResourceAsStream(resourcePath)) {
