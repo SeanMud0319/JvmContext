@@ -18,7 +18,6 @@ if(WIN32)
 endif()
 
 if(APPLE)
-    target_link_options(JvmContext PRIVATE "-undefined" "dynamic_lookup")
     add_custom_command(TARGET JvmContext POST_BUILD
             COMMAND codesign --force --sign - "$<TARGET_FILE:JvmContext>"
             COMMENT "Ad-hoc signing $<TARGET_FILE_NAME:JvmContext>"
